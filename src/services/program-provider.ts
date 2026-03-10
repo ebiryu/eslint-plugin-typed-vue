@@ -119,6 +119,7 @@ export class ProgramProvider {
     const vueFiles = new Set<string>();
 
     const dirs = new Set<string>();
+    dirs.add(rootDir);
     for (const f of tsFileNames) {
       dirs.add(path.dirname(f));
     }
