@@ -1,6 +1,7 @@
 import type { ESLint } from "eslint";
 import { createRecommendedConfig } from "./configs/recommended.js";
 import { rules } from "./rules/index.js";
+import { processor } from "./processor.js";
 
 const plugin: ESLint.Plugin = {
   meta: {
@@ -8,6 +9,9 @@ const plugin: ESLint.Plugin = {
     version: "0.1.0",
   },
   rules,
+  processors: {
+    vue: processor,
+  },
   configs: {},
 };
 

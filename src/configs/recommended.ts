@@ -1,12 +1,14 @@
 import type { Linter } from "eslint";
 import * as vueParser from "vue-eslint-parser";
 import * as enhancedParser from "../parser/enhanced-parser.js";
+import { processor } from "../processor.js";
 
 export function createRecommendedConfig(): Linter.Config[] {
   return [
     {
       name: "typed-vue/recommended-vue",
       files: ["**/*.vue"],
+      processor,
       languageOptions: {
         parser: vueParser,
         parserOptions: {

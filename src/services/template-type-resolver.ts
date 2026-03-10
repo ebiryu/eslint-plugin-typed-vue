@@ -1,0 +1,138 @@
+import { readFileSync } from "node:fs";
+import type tsLib from "typescript";
+import type { SourceMapping, VirtualFileInfo } from "./vue-virtual-files.js";
+import type { ProgramProvider } from "./program-provider.js";
+
+/**
+ * Maps a source offset in the .vue file to a generated offset in the Volar virtual TS code.
+ * Uses the Volar source mappings from the service script.
+ */
+function sourceToGenerated(
+  mappings: SourceMapping[],
+  sourceOffset: number,
+): number | undefined {
+  for (const m of mappings) {
+    for (let i = 0; i < m.sourceOffsets.length; i++) {
+      const sOff = m.sourceOffsets[i];
+      const gOff = m.generatedOffsets[i];
+      const len = m.lengths[i];
+      if (sourceOffset >= sOff && sourceOffset < sOff + len) {
+        return gOff + (sourceOffset - sOff);
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Find the TS AST node that best spans the given range in a source file.
+ * When endPosition is provided, walks up from the innermost node at startPosition
+ * to find one that also covers endPosition (i.e., the full expression).
+ */
+function findNodeAtRange(
+  tsModule: typeof tsLib,
+  sourceFile: tsLib.SourceFile,
+  startPosition: number,
+  endPosition?: number,
+): tsLib.Node | undefined {
+  function visit(node: tsLib.Node): tsLib.Node | undefined {
+    if (startPosition < node.getStart(sourceFile) || startPosition >= node.getEnd()) {
+      return undefined;
+    }
+    return tsModule.forEachChild(node, visit) ?? node;
+  }
+  let node = visit(sourceFile);
+  if (!node || endPosition === undefined) return node;
+
+  // Walk up to find a node that spans the full expression range
+  while (node && node.getEnd() < endPosition && node.parent) {
+    node = node.parent;
+  }
+  return node;
+}
+
+export interface TemplateExpressionType {
+  typeString: string;
+  flags: number;
+}
+
+/**
+ * Provides type information for template expressions by using Volar's generated
+ * virtual TypeScript code and source mappings.
+ *
+ * The base Program (with Volar virtual code) contains type-checked template code
+ * like `__VLS_ctx.count > 0` for `v-if="count > 0"`. The mappings connect
+ * template source positions to positions in this generated code, allowing us to
+ * look up types via the TypeScript type checker.
+ */
+export class TemplateTypeResolver {
+  constructor(
+    private tsModule: typeof tsLib,
+    private provider: ProgramProvider,
+    private tsconfigRootDir: string,
+  ) {}
+
+  /**
+   * Get the type of a template expression at a given source offset in the .vue file.
+   */
+  getTypeAtSourceOffset(
+    vueFilePath: string,
+    sourceOffset: number,
+    sourceEndOffset?: number,
+  ): TemplateExpressionType | undefined {
+    const vueVirtualFiles = this.provider.getVueVirtualFiles();
+    if (!vueVirtualFiles) return undefined;
+
+    const content = readFileSync(vueFilePath, "utf-8") as string;
+    const vFileInfo = vueVirtualFiles.getVirtualFile(vueFilePath, content);
+    if (!vFileInfo) return undefined;
+
+    return this.getTypeFromVirtualFile(vFileInfo, vueFilePath, sourceOffset, sourceEndOffset);
+  }
+
+  /**
+   * Get the type of a template expression using pre-loaded virtual file info.
+   */
+  getTypeFromVirtualFile(
+    vFileInfo: VirtualFileInfo,
+    vueFilePath: string,
+    sourceOffset: number,
+    sourceEndOffset?: number,
+  ): TemplateExpressionType | undefined {
+    const generatedOffset = sourceToGenerated(vFileInfo.mappings, sourceOffset);
+    if (generatedOffset === undefined) return undefined;
+
+    const generatedEndOffset = sourceEndOffset !== undefined
+      ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
+      : undefined;
+
+    const baseProgram = this.provider.getProgram(this.tsconfigRootDir);
+    const sourceFile = baseProgram.getSourceFile(vueFilePath);
+    if (!sourceFile) return undefined;
+
+    const node = findNodeAtRange(
+      this.tsModule, sourceFile, generatedOffset,
+      generatedEndOffset !== undefined ? generatedEndOffset + 1 : undefined,
+    );
+    if (!node) return undefined;
+
+    const checker = baseProgram.getTypeChecker();
+    const type = checker.getTypeAtLocation(node);
+
+    return {
+      typeString: checker.typeToString(type),
+      flags: type.flags,
+    };
+  }
+}
+
+// Singleton storage for per-file resolver instances, accessible from rules
+const resolverStore = new Map<string, TemplateTypeResolver>();
+
+export function setTemplateTypeResolver(key: string, resolver: TemplateTypeResolver): void {
+  resolverStore.set(key, resolver);
+}
+
+export function getTemplateTypeResolver(key: string): TemplateTypeResolver | undefined {
+  return resolverStore.get(key);
+}

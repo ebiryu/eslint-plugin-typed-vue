@@ -25,11 +25,43 @@ interface VueLanguagePluginWithTs {
   };
 }
 
+export interface SourceMapping {
+  sourceOffsets: number[];
+  generatedOffsets: number[];
+  lengths: number[];
+  generatedLengths?: number[];
+}
+
 export interface VirtualFileInfo {
   code: string;
   virtualCode: VueVirtualCode;
   scriptKind: number;
   snapshot: ts.IScriptSnapshot;
+  /** Mappings from .vue source positions to generated TS positions */
+  mappings: SourceMapping[];
+}
+
+/**
+ * Maps a generated offset in the Volar virtual TS code back to a source offset in the .vue file.
+ */
+export function generatedToSource(
+  mappings: SourceMapping[],
+  generatedOffset: number,
+): number | undefined {
+  for (const m of mappings) {
+    for (let i = 0; i < m.generatedOffsets.length; i++) {
+      const gOff = m.generatedOffsets[i];
+      const sOff = m.sourceOffsets[i];
+      const gLen = m.generatedLengths?.[i] ?? m.lengths[i];
+      if (generatedOffset >= gOff && generatedOffset < gOff + gLen) {
+        const delta = generatedOffset - gOff;
+        if (delta < m.lengths[i]) {
+          return sOff + delta;
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 export class VueVirtualFiles {
@@ -90,6 +122,7 @@ export class VueVirtualFiles {
       virtualCode,
       scriptKind: serviceScript.scriptKind,
       snapshot: serviceScript.code.snapshot,
+      mappings: (serviceScript.code.mappings ?? []) as SourceMapping[],
     };
 
     this.cache.set(fileName, info);

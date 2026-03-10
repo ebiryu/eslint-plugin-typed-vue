@@ -99,6 +99,32 @@ export class ProgramProvider {
     return this.vueVirtualFiles;
   }
 
+  /**
+   * Ensure VueVirtualFiles is initialized without creating the full Program.
+   * Used by the processor which needs virtual files before parsing begins.
+   */
+  getOrCreateVueVirtualFiles(tsconfigRootDir: string): VueVirtualFiles {
+    if (this.vueVirtualFiles) return this.vueVirtualFiles;
+
+    const tsconfigPath = this.findTsconfig(tsconfigRootDir);
+    const configFile = this.tsModule.readConfigFile(tsconfigPath, (p: string) =>
+      fs.readFileSync(p, "utf-8"),
+    );
+    const parsedConfig = this.tsModule.parseJsonConfigFileContent(
+      configFile.config,
+      this.tsModule.sys,
+      path.dirname(tsconfigPath),
+    );
+
+    const compilerOptions: tsLib.CompilerOptions = {
+      ...parsedConfig.options,
+      allowNonTsExtensions: true,
+    };
+
+    this.vueVirtualFiles = new VueVirtualFiles(this.tsModule, compilerOptions);
+    return this.vueVirtualFiles;
+  }
+
   reset() {
     this.program = undefined;
     this.vueVirtualFiles?.clearCache();
