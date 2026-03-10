@@ -20,9 +20,24 @@ export const parseForESLint = (code: string, options: Record<string, unknown>): 
 
   const isVueFile = filePath?.endsWith(".vue");
   const isTsFile = filePath != null && /\.[cm]?tsx?$/.test(filePath);
-  const shouldInjectProgram = (isVueFile && !isTemplateExpression(code)) || isTsFile;
 
-  if (shouldInjectProgram) {
+  if (isVueFile && !isTemplateExpression(code)) {
+    // For .vue files, @typescript-eslint/parser's `programs` option uses the
+    // Program's source file AST directly (Volar's virtual code), not the provided code.
+    // This causes AST mismatches with vue-eslint-parser. To fix this, we create a
+    // per-call program where the .vue source file matches the code that
+    // vue-eslint-parser provides, using oldProgram for incremental compilation.
+    try {
+      const provider = getProgramProvider(ts);
+      const program = provider.getProgramForVueCode(tsconfigRootDir, filePath!, code);
+
+      enhancedOptions.programs = [program];
+      delete enhancedOptions.project;
+      delete enhancedOptions.projectService;
+    } catch (e) {
+      console.warn("[eslint-plugin-typed-vue] Failed to create typed program:", e);
+    }
+  } else if (isTsFile) {
     try {
       const provider = getProgramProvider(ts);
       const program = provider.getProgram(tsconfigRootDir);

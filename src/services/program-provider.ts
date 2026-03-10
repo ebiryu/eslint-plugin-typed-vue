@@ -47,6 +47,54 @@ export class ProgramProvider {
     return this.program;
   }
 
+  /**
+   * Create a program where the specified .vue file's source matches the given code
+   * instead of Volar's virtual code. Uses the base program as oldProgram for
+   * incremental compilation. This ensures @typescript-eslint/parser sees an AST
+   * that matches what vue-eslint-parser expects.
+   */
+  getProgramForVueCode(
+    tsconfigRootDir: string,
+    vueFilePath: string,
+    code: string,
+  ): tsLib.Program {
+    const baseProgram = this.getProgram(tsconfigRootDir);
+    const options = baseProgram.getCompilerOptions();
+    const baseHost = this.createCompilerHost(options);
+
+    // Determine ScriptKind from the base program's source file (set by Volar)
+    const baseSf = baseProgram.getSourceFile(vueFilePath);
+    const scriptKind =
+      (baseSf as { scriptKind?: number })?.scriptKind ?? this.tsModule.ScriptKind.TS;
+
+    const host: tsLib.CompilerHost = {
+      ...baseHost,
+      getSourceFile: (fileName, languageVersionOrOptions, onError) => {
+        if (fileName === vueFilePath) {
+          const languageVersion =
+            typeof languageVersionOrOptions === "number"
+              ? languageVersionOrOptions
+              : languageVersionOrOptions.languageVersion;
+          return this.tsModule.createSourceFile(
+            fileName,
+            code,
+            languageVersion,
+            true,
+            scriptKind,
+          );
+        }
+        return baseHost.getSourceFile!(fileName, languageVersionOrOptions, onError);
+      },
+    };
+
+    return this.tsModule.createProgram({
+      rootNames: baseProgram.getRootFileNames(),
+      options,
+      host,
+      oldProgram: baseProgram,
+    });
+  }
+
   getVueVirtualFiles(): VueVirtualFiles | undefined {
     return this.vueVirtualFiles;
   }
