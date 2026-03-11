@@ -5,8 +5,8 @@ import { getTemplateTypeResolver } from "../services/template-type-resolver.ts";
 /**
  * Checks that v-if / v-else-if / v-show directives use strictly boolean expressions.
  *
- * Uses Volar's template virtual code and source mappings to get type info for
- * template expressions from the TypeScript type checker.
+ * Uses @vue/language-core's template virtual code and source mappings to get
+ * type info for template expressions from the TypeScript type checker.
  */
 const rule: Rule.RuleModule = {
   meta: {

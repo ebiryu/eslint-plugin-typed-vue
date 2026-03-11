@@ -40,7 +40,7 @@ export const parseForESLint = (code: string, options: Record<string, unknown>): 
       const provider = getProgramProvider(ts);
 
       if (processorInfo.isTs) {
-        // Block 1 (.ts): Volar-generated code. Use base program with filePath override.
+        // Block 1 (.ts): @vue/language-core generated code. Use base program with filePath override.
         const program = provider.getProgram(tsconfigRootDir);
         enhancedOptions.programs = [program];
         enhancedOptions.filePath = processorInfo.vuePath;
@@ -81,7 +81,7 @@ export const parseForESLint = (code: string, options: Record<string, unknown>): 
 
   if (isVueFile && !isTemplateExpression(code)) {
     // For .vue files, @typescript-eslint/parser's `programs` option uses the
-    // Program's source file AST directly (Volar's virtual code), not the provided code.
+    // Program's source file AST directly (@vue/language-core's virtual code), not the provided code.
     // This causes AST mismatches with vue-eslint-parser. To fix this, we create a
     // per-call program where the .vue source file matches the code that
     // vue-eslint-parser provides, using oldProgram for incremental compilation.
@@ -90,7 +90,7 @@ export const parseForESLint = (code: string, options: Record<string, unknown>): 
       const program = provider.getProgramForVueCode(tsconfigRootDir, filePath!, code);
 
       // Initialize TemplateTypeResolver for this file so custom rules
-      // can access type info for template expressions via Volar mappings.
+      // can access type info for template expressions via @vue/language-core mappings.
       const resolver = new TemplateTypeResolver(ts, provider, tsconfigRootDir);
       setTemplateTypeResolver(filePath!, resolver);
 

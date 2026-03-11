@@ -42,7 +42,7 @@ export interface VirtualFileInfo {
 }
 
 /**
- * Maps a generated offset in the Volar virtual TS code back to a source offset in the .vue file.
+ * Maps a generated offset in the virtual TS code back to a source offset in the .vue file.
  */
 export function generatedToSource(
   mappings: SourceMapping[],
