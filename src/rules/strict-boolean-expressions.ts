@@ -1,6 +1,7 @@
 import type { Rule } from "eslint";
 import ts from "typescript";
 import { getTemplateTypeResolver } from "../services/template-type-resolver.ts";
+import type { VueParserServices } from "./types.ts";
 
 /**
  * Checks that v-if / v-else-if / v-show directives use strictly boolean expressions.
@@ -12,8 +13,7 @@ const rule: Rule.RuleModule = {
   meta: {
     type: "problem",
     docs: {
-      description:
-        "Require boolean expressions in v-if, v-else-if, and v-show directives",
+      description: "Require boolean expressions in v-if, v-else-if, and v-show directives",
     },
     messages: {
       notBoolean:
@@ -28,7 +28,7 @@ const rule: Rule.RuleModule = {
     const resolver = getTemplateTypeResolver(filePath);
     if (!resolver) return {};
 
-    const parserServices = context.sourceCode.parserServices as any;
+    const parserServices = context.sourceCode.parserServices as unknown as VueParserServices;
     if (!parserServices?.defineTemplateBodyVisitor) return {};
 
     function checkDirective(node: any) {
@@ -45,8 +45,7 @@ const rule: Rule.RuleModule = {
       const type = typeInfo.flags;
 
       const isBooleanLike =
-        !!(type & ts.TypeFlags.Boolean) ||
-        !!(type & ts.TypeFlags.BooleanLiteral);
+        !!(type & ts.TypeFlags.Boolean) || !!(type & ts.TypeFlags.BooleanLiteral);
 
       if (isBooleanLike) return;
 
