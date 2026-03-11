@@ -11,14 +11,8 @@ const fixturesDir = path.resolve(__dirname, "fixtures/processor");
 
 describe("processor: preprocess", () => {
   it("should return two blocks for .vue files", () => {
-    const content = fs.readFileSync(
-      path.join(fixturesDir, "safe-template.vue"),
-      "utf-8",
-    );
-    const blocks = processor.preprocess!(
-      content,
-      path.join(fixturesDir, "safe-template.vue"),
-    );
+    const content = fs.readFileSync(path.join(fixturesDir, "safe-template.vue"), "utf-8");
+    const blocks = processor.preprocess!(content, path.join(fixturesDir, "safe-template.vue"));
 
     expect(blocks.length).toBe(2);
 
@@ -147,9 +141,7 @@ describe("processor: E2E with ESLint", () => {
         "@typescript-eslint/no-unsafe-member-access": "error",
       });
 
-      const results = await eslint.lintFiles([
-        path.join(fixturesDir, "unsafe-template.vue"),
-      ]);
+      const results = await eslint.lintFiles([path.join(fixturesDir, "unsafe-template.vue")]);
 
       expect(results).toHaveLength(1);
       const errors = results[0].messages.filter(
@@ -166,23 +158,17 @@ describe("processor: E2E with ESLint", () => {
     },
   );
 
-  it(
-    "should NOT report errors on safe template expressions",
-    { timeout: 15000 },
-    async () => {
-      const eslint = createESLint({
-        "@typescript-eslint/no-unsafe-member-access": "error",
-      });
+  it("should NOT report errors on safe template expressions", { timeout: 15000 }, async () => {
+    const eslint = createESLint({
+      "@typescript-eslint/no-unsafe-member-access": "error",
+    });
 
-      const results = await eslint.lintFiles([
-        path.join(fixturesDir, "safe-template.vue"),
-      ]);
+    const results = await eslint.lintFiles([path.join(fixturesDir, "safe-template.vue")]);
 
-      expect(results).toHaveLength(1);
-      const errors = results[0].messages.filter(
-        (m) => m.ruleId === "@typescript-eslint/no-unsafe-member-access",
-      );
-      expect(errors).toHaveLength(0);
-    },
-  );
+    expect(results).toHaveLength(1);
+    const errors = results[0].messages.filter(
+      (m) => m.ruleId === "@typescript-eslint/no-unsafe-member-access",
+    );
+    expect(errors).toHaveLength(0);
+  });
 });

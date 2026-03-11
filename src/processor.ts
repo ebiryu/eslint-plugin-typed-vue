@@ -1,5 +1,4 @@
 import * as path from "node:path";
-import * as fs from "node:fs";
 import ts from "typescript";
 import type { Linter } from "eslint";
 import { getProgramProvider } from "./services/program-provider.ts";
@@ -18,8 +17,8 @@ function findTsconfigDir(filePath: string): string {
   let dir = path.dirname(filePath);
   while (dir !== path.dirname(dir)) {
     if (
-      fs.existsSync(path.join(dir, "tsconfig.json")) ||
-      fs.existsSync(path.join(dir, "tsconfig.app.json"))
+      ts.sys.fileExists(path.join(dir, "tsconfig.json")) ||
+      ts.sys.fileExists(path.join(dir, "tsconfig.app.json"))
     ) {
       return dir;
     }

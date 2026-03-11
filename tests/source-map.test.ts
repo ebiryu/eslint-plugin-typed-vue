@@ -46,7 +46,7 @@ describe("template type checking", () => {
 });
 
 describe("source map: error positions", () => {
-  it("should report correct line numbers for <script lang=\"ts\">", async () => {
+  it('should report correct line numbers for <script lang="ts">', async () => {
     const eslint = createESLint();
     const results = await eslint.lintFiles([path.join(fixturesDir, "multiline-unsafe.vue")]);
 
@@ -61,7 +61,7 @@ describe("source map: error positions", () => {
     expect(errors[1].line).toBe(8);
   });
 
-  it("should report correct line numbers for <script setup lang=\"ts\">", async () => {
+  it('should report correct line numbers for <script setup lang="ts">', async () => {
     const eslint = createESLint();
     const results = await eslint.lintFiles([path.join(fixturesDir, "setup-multiline.vue")]);
 

@@ -81,7 +81,7 @@ describe("tsx: E2E ESLint", () => {
     });
   }
 
-  it("should detect no-unsafe-assignment in <script lang=\"tsx\">", async () => {
+  it('should detect no-unsafe-assignment in <script lang="tsx">', async () => {
     const eslint = createESLint();
     const results = await eslint.lintFiles([path.join(fixturesDir, "unsafe-tsx.vue")]);
 
@@ -92,7 +92,7 @@ describe("tsx: E2E ESLint", () => {
     expect(unsafeErrors.length).toBeGreaterThan(0);
   });
 
-  it("should NOT report errors on safe <script lang=\"tsx\">", async () => {
+  it('should NOT report errors on safe <script lang="tsx">', async () => {
     const eslint = createESLint();
     const results = await eslint.lintFiles([path.join(fixturesDir, "safe-tsx.vue")]);
 

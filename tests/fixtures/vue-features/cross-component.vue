@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import type { User } from './types';
+import { ref } from "vue";
+import type { User } from "./types";
 
 const user = ref<User>({ id: 1, name: "Alice", role: "admin" });
 

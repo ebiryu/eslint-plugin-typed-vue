@@ -1,28 +1,6 @@
-import { readFileSync } from "node:fs";
 import type tsLib from "typescript";
-import type { SourceMapping, VirtualFileInfo } from "./vue-virtual-files.ts";
+import { sourceToGenerated, type VirtualFileInfo } from "./vue-virtual-files.ts";
 import type { ProgramProvider } from "./program-provider.ts";
-
-/**
- * Maps a source offset in the .vue file to a generated offset in the virtual TS code.
- * Uses the source mappings from the @vue/language-core service script.
- */
-function sourceToGenerated(
-  mappings: SourceMapping[],
-  sourceOffset: number,
-): number | undefined {
-  for (const m of mappings) {
-    for (let i = 0; i < m.sourceOffsets.length; i++) {
-      const sOff = m.sourceOffsets[i];
-      const gOff = m.generatedOffsets[i];
-      const len = m.lengths[i];
-      if (sourceOffset >= sOff && sourceOffset < sOff + len) {
-        return gOff + (sourceOffset - sOff);
-      }
-    }
-  }
-  return undefined;
-}
 
 /**
  * Find the TS AST node that best spans the given range in a source file.
@@ -66,6 +44,9 @@ export interface TemplateExpressionType {
  * look up types via the TypeScript type checker.
  */
 export class TemplateTypeResolver {
+  private fileContentCache = new Map<string, string>();
+  private vFileInfoCache = new Map<string, VirtualFileInfo>();
+
   constructor(
     private tsModule: typeof tsLib,
     private provider: ProgramProvider,
@@ -80,13 +61,25 @@ export class TemplateTypeResolver {
     sourceOffset: number,
     sourceEndOffset?: number,
   ): TemplateExpressionType | undefined {
+    const cachedVFileInfo = this.vFileInfoCache.get(vueFilePath);
+    if (cachedVFileInfo) {
+      return this.getTypeFromVirtualFile(cachedVFileInfo, vueFilePath, sourceOffset, sourceEndOffset);
+    }
+
     const vueVirtualFiles = this.provider.getVueVirtualFiles();
     if (!vueVirtualFiles) return undefined;
 
-    const content = readFileSync(vueFilePath, "utf-8") as string;
+    let content = this.fileContentCache.get(vueFilePath);
+    if (content === undefined) {
+      content = this.provider.readFile(vueFilePath);
+      if (content === undefined) return undefined;
+      this.fileContentCache.set(vueFilePath, content);
+    }
+
     const vFileInfo = vueVirtualFiles.getVirtualFile(vueFilePath, content);
     if (!vFileInfo) return undefined;
 
+    this.vFileInfoCache.set(vueFilePath, vFileInfo);
     return this.getTypeFromVirtualFile(vFileInfo, vueFilePath, sourceOffset, sourceEndOffset);
   }
 
@@ -102,16 +95,19 @@ export class TemplateTypeResolver {
     const generatedOffset = sourceToGenerated(vFileInfo.mappings, sourceOffset);
     if (generatedOffset === undefined) return undefined;
 
-    const generatedEndOffset = sourceEndOffset !== undefined
-      ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
-      : undefined;
+    const generatedEndOffset =
+      sourceEndOffset !== undefined
+        ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
+        : undefined;
 
     const baseProgram = this.provider.getProgram(this.tsconfigRootDir);
     const sourceFile = baseProgram.getSourceFile(vueFilePath);
     if (!sourceFile) return undefined;
 
     const node = findNodeAtRange(
-      this.tsModule, sourceFile, generatedOffset,
+      this.tsModule,
+      sourceFile,
+      generatedOffset,
       generatedEndOffset !== undefined ? generatedEndOffset + 1 : undefined,
     );
     if (!node) return undefined;

@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends { id: number }">
-import { computed } from 'vue';
+import { computed } from "vue";
 
 const props = defineProps<{
   items: T[];

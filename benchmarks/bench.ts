@@ -123,7 +123,6 @@ const resetCache = pluginModule.resetCache;
 const tsPlugin = (await import("@typescript-eslint/eslint-plugin")).default;
 
 function createESLint() {
-
   return new ESLint({
     overrideConfigFile: true,
     overrideConfig: [
@@ -150,9 +149,7 @@ async function runBenchmark(count: number) {
   generateFixtures(count);
 
   const eslint = createESLint();
-  const files = Array.from({ length: count }, (_, i) =>
-    path.join(fixturesDir, `Comp${i}.vue`),
-  );
+  const files = Array.from({ length: count }, (_, i) => path.join(fixturesDir, `Comp${i}.vue`));
 
   const start = performance.now();
   const results = await eslint.lintFiles(files);
