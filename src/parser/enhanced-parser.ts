@@ -1,10 +1,10 @@
 import ts from "typescript";
 import * as tsParser from "@typescript-eslint/parser";
-import { getProgramProvider } from "../services/program-provider.js";
+import { getProgramProvider } from "../services/program-provider.ts";
 import {
   TemplateTypeResolver,
   setTemplateTypeResolver,
-} from "../services/template-type-resolver.js";
+} from "../services/template-type-resolver.ts";
 
 /**
  * Detect template expression fragments from vue-eslint-parser.

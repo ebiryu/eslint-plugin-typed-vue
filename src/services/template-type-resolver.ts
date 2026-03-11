@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type tsLib from "typescript";
-import type { SourceMapping, VirtualFileInfo } from "./vue-virtual-files.js";
-import type { ProgramProvider } from "./program-provider.js";
+import type { SourceMapping, VirtualFileInfo } from "./vue-virtual-files.ts";
+import type { ProgramProvider } from "./program-provider.ts";
 
 /**
  * Maps a source offset in the .vue file to a generated offset in the Volar virtual TS code.

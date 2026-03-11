@@ -1,7 +1,7 @@
 import type { Linter } from "eslint";
 import * as vueParser from "vue-eslint-parser";
-import * as enhancedParser from "../parser/enhanced-parser.js";
-import { processor } from "../processor.js";
+import * as enhancedParser from "../parser/enhanced-parser.ts";
+import { processor } from "../processor.ts";
 
 export function createRecommendedConfig(): Linter.Config[] {
   return [

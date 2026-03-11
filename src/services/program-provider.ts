@@ -1,66 +1,71 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
 import type tsLib from "typescript";
-import { VueVirtualFiles } from "./vue-virtual-files.js";
+import { VueVirtualFiles } from "./vue-virtual-files.ts";
+
+interface ParsedTsconfig {
+  compilerOptions: tsLib.CompilerOptions;
+  fileNames: string[];
+  tsconfigDir: string;
+}
 
 export class ProgramProvider {
-  private program: tsLib.Program | undefined;
-  private vueVirtualFiles: VueVirtualFiles | undefined;
+  /** Base programs keyed by tsconfigRootDir */
+  private programs = new Map<string, tsLib.Program>();
+  /** VueVirtualFiles keyed by tsconfigRootDir */
+  private vueVirtualFilesMap = new Map<string, VueVirtualFiles>();
+  /** Parsed tsconfig keyed by tsconfigRootDir */
+  private tsconfigCache = new Map<string, ParsedTsconfig>();
+  /** Per-file program cache: one entry per vueFilePath (latest code only) */
+  private perFilePrograms = new Map<string, { code: string; program: tsLib.Program }>();
+  /** Source file cache for CompilerHost (avoids repeated disk reads) */
+  private sourceFileCache = new Map<string, tsLib.SourceFile>();
 
   constructor(private tsModule: typeof tsLib) {}
 
   getProgram(tsconfigRootDir: string): tsLib.Program {
-    if (this.program) {
-      return this.program;
-    }
+    const cached = this.programs.get(tsconfigRootDir);
+    if (cached) return cached;
 
-    const tsconfigPath = this.findTsconfig(tsconfigRootDir);
+    const config = this.getParsedTsconfig(tsconfigRootDir);
 
-    const configFile = this.tsModule.readConfigFile(tsconfigPath, (p: string) =>
-      fs.readFileSync(p, "utf-8"),
-    );
-    const parsedConfig = this.tsModule.parseJsonConfigFileContent(
-      configFile.config,
-      this.tsModule.sys,
-      path.dirname(tsconfigPath),
-    );
+    const vueVirtualFiles = this.getOrCreateVueVirtualFiles(tsconfigRootDir);
+    const vueFiles = this.collectVueFiles(config.fileNames, config.tsconfigDir);
+    const allFileNames = [...config.fileNames, ...vueFiles];
 
-    // Allow .vue extensions to be processed by TypeScript
-    const compilerOptions: tsLib.CompilerOptions = {
-      ...parsedConfig.options,
-      allowNonTsExtensions: true,
-    };
+    const host = this.createCompilerHost(config.compilerOptions, vueVirtualFiles);
 
-    this.vueVirtualFiles = new VueVirtualFiles(this.tsModule, compilerOptions);
-
-    const vueFiles = this.collectVueFiles(parsedConfig.fileNames, path.dirname(tsconfigPath));
-    const allFileNames = [...parsedConfig.fileNames, ...vueFiles];
-
-    const host = this.createCompilerHost(compilerOptions);
-
-    this.program = this.tsModule.createProgram({
+    const program = this.tsModule.createProgram({
       rootNames: allFileNames,
-      options: compilerOptions,
+      options: config.compilerOptions,
       host,
     });
 
-    return this.program;
+    this.programs.set(tsconfigRootDir, program);
+    return program;
   }
 
   /**
    * Create a program where the specified .vue file's source matches the given code
-   * instead of Volar's virtual code. Uses the base program as oldProgram for
-   * incremental compilation. This ensures @typescript-eslint/parser sees an AST
-   * that matches what vue-eslint-parser expects.
+   * instead of Volar's virtual code. Caches the result so that multiple parseForESLint
+   * calls for the same file and code reuse the same program.
    */
   getProgramForVueCode(
     tsconfigRootDir: string,
     vueFilePath: string,
     code: string,
   ): tsLib.Program {
+    const cached = this.perFilePrograms.get(vueFilePath);
+    if (cached && cached.code === code) return cached.program;
+
     const baseProgram = this.getProgram(tsconfigRootDir);
     const options = baseProgram.getCompilerOptions();
-    const baseHost = this.createCompilerHost(options);
+    const vueVirtualFiles = this.getOrCreateVueVirtualFiles(tsconfigRootDir);
+    const baseHost = this.createCompilerHost(options, vueVirtualFiles);
+
+    // Use the previous per-file program as oldProgram if available,
+    // otherwise fall back to the base program
+    const oldProgram = cached?.program ?? baseProgram;
 
     // Determine ScriptKind from the base program's source file (set by Volar)
     const baseSf = baseProgram.getSourceFile(vueFilePath);
@@ -87,47 +92,77 @@ export class ProgramProvider {
       },
     };
 
-    return this.tsModule.createProgram({
+    const program = this.tsModule.createProgram({
       rootNames: baseProgram.getRootFileNames(),
       options,
       host,
-      oldProgram: baseProgram,
+      oldProgram,
     });
+
+    this.perFilePrograms.set(vueFilePath, { code, program });
+
+    return program;
   }
 
   getVueVirtualFiles(): VueVirtualFiles | undefined {
-    return this.vueVirtualFiles;
+    // Return the first available instance (for backward compatibility)
+    for (const vf of this.vueVirtualFilesMap.values()) {
+      return vf;
+    }
+    return undefined;
   }
 
   /**
-   * Ensure VueVirtualFiles is initialized without creating the full Program.
+   * Ensure VueVirtualFiles is initialized for the given tsconfigRootDir.
    * Used by the processor which needs virtual files before parsing begins.
    */
   getOrCreateVueVirtualFiles(tsconfigRootDir: string): VueVirtualFiles {
-    if (this.vueVirtualFiles) return this.vueVirtualFiles;
+    const cached = this.vueVirtualFilesMap.get(tsconfigRootDir);
+    if (cached) return cached;
+
+    const config = this.getParsedTsconfig(tsconfigRootDir);
+    const vueVirtualFiles = new VueVirtualFiles(this.tsModule, config.compilerOptions);
+    this.vueVirtualFilesMap.set(tsconfigRootDir, vueVirtualFiles);
+    return vueVirtualFiles;
+  }
+
+  reset() {
+    this.programs.clear();
+    this.perFilePrograms.clear();
+    this.sourceFileCache.clear();
+    this.tsconfigCache.clear();
+    for (const vf of this.vueVirtualFilesMap.values()) {
+      vf.clearCache();
+    }
+    this.vueVirtualFilesMap.clear();
+  }
+
+  private getParsedTsconfig(tsconfigRootDir: string): ParsedTsconfig {
+    const cached = this.tsconfigCache.get(tsconfigRootDir);
+    if (cached) return cached;
 
     const tsconfigPath = this.findTsconfig(tsconfigRootDir);
     const configFile = this.tsModule.readConfigFile(tsconfigPath, (p: string) =>
       fs.readFileSync(p, "utf-8"),
     );
+    const tsconfigDir = path.dirname(tsconfigPath);
     const parsedConfig = this.tsModule.parseJsonConfigFileContent(
       configFile.config,
       this.tsModule.sys,
-      path.dirname(tsconfigPath),
+      tsconfigDir,
     );
 
-    const compilerOptions: tsLib.CompilerOptions = {
-      ...parsedConfig.options,
-      allowNonTsExtensions: true,
+    const result: ParsedTsconfig = {
+      compilerOptions: {
+        ...parsedConfig.options,
+        allowNonTsExtensions: true,
+      },
+      fileNames: parsedConfig.fileNames,
+      tsconfigDir,
     };
 
-    this.vueVirtualFiles = new VueVirtualFiles(this.tsModule, compilerOptions);
-    return this.vueVirtualFiles;
-  }
-
-  reset() {
-    this.program = undefined;
-    this.vueVirtualFiles?.clearCache();
+    this.tsconfigCache.set(tsconfigRootDir, result);
+    return result;
   }
 
   private findTsconfig(rootDir: string): string {
@@ -181,7 +216,10 @@ export class ProgramProvider {
     }
   }
 
-  private createCompilerHost(options: tsLib.CompilerOptions): tsLib.CompilerHost {
+  private createCompilerHost(
+    options: tsLib.CompilerOptions,
+    vueVirtualFiles: VueVirtualFiles,
+  ): tsLib.CompilerHost {
     const defaultHost = this.tsModule.createCompilerHost(options);
 
     const host: tsLib.CompilerHost = {
@@ -196,9 +234,18 @@ export class ProgramProvider {
 
       getSourceFile: (fileName, languageVersionOrOptions, onError) => {
         if (fileName.endsWith(".vue")) {
-          return this.getVueSourceFile(fileName, languageVersionOrOptions);
+          return this.getVueSourceFile(fileName, languageVersionOrOptions, vueVirtualFiles);
         }
-        return defaultHost.getSourceFile(fileName, languageVersionOrOptions, onError);
+
+        // Cache non-.vue source files to avoid repeated disk reads
+        const cached = this.sourceFileCache.get(fileName);
+        if (cached) return cached;
+
+        const sf = defaultHost.getSourceFile(fileName, languageVersionOrOptions, onError);
+        if (sf) {
+          this.sourceFileCache.set(fileName, sf);
+        }
+        return sf;
       },
 
       resolveModuleNames: (
@@ -242,6 +289,7 @@ export class ProgramProvider {
   private getVueSourceFile(
     fileName: string,
     languageVersionOrOptions: tsLib.ScriptTarget | tsLib.CreateSourceFileOptions,
+    vueVirtualFiles: VueVirtualFiles,
   ): tsLib.SourceFile | undefined {
     const languageVersion =
       typeof languageVersionOrOptions === "number"
@@ -250,7 +298,7 @@ export class ProgramProvider {
 
     try {
       const content = fs.readFileSync(fileName, "utf-8");
-      const virtualFile = this.vueVirtualFiles?.getVirtualFile(fileName, content);
+      const virtualFile = vueVirtualFiles.getVirtualFile(fileName, content);
 
       if (!virtualFile) {
         return this.tsModule.createSourceFile(

@@ -2,8 +2,8 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import ts from "typescript";
 import type { Linter } from "eslint";
-import { getProgramProvider } from "./services/program-provider.js";
-import { generatedToSource, type SourceMapping } from "./services/vue-virtual-files.js";
+import { getProgramProvider } from "./services/program-provider.ts";
+import { generatedToSource, type SourceMapping } from "./services/vue-virtual-files.ts";
 
 interface ProcessorFileData {
   sourceText: string;

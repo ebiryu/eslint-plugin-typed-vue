@@ -10,7 +10,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "tests"]

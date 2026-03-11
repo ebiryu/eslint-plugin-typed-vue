@@ -1,6 +1,6 @@
 import type { Rule } from "eslint";
 import ts from "typescript";
-import { getTemplateTypeResolver } from "../services/template-type-resolver.js";
+import { getTemplateTypeResolver } from "../services/template-type-resolver.ts";
 
 /**
  * Checks that v-if / v-else-if / v-show directives use strictly boolean expressions.
