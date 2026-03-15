@@ -28,6 +28,7 @@ typescript-eslint type-aware rules work correctly
 - TypeScript >= 5.0.0
 - vue-eslint-parser >= 9.0.0
 - @typescript-eslint/parser >= 8.0.0
+- eslint-plugin-vue >= 10.0.0
 
 ## Installation
 
@@ -38,7 +39,7 @@ npm install -D eslint-plugin-typed-vue
 Peer dependencies:
 
 ```bash
-npm install -D eslint typescript vue-eslint-parser @typescript-eslint/parser @typescript-eslint/eslint-plugin
+npm install -D eslint typescript vue-eslint-parser @typescript-eslint/parser eslint-plugin-vue
 ```
 
 ## Usage
@@ -63,8 +64,9 @@ export default tseslint.config(
 
 The `recommended` config sets up:
 
-- **`**/\*.vue`**: `vue-eslint-parser`with`enhanced-parser` as the inner parser, plus the Processor for template type checking
-- **`**/_.ts`, `\*\*/_.tsx`, etc.**: `enhanced-parser`for type-aware linting with`.vue` import support
+- **Plugin registration**: Registers `typed-vue` plugin globally so custom rules are available
+- **`**/*.vue`**: `vue-eslint-parser` with `enhanced-parser` as the inner parser, plus the Processor for template type checking
+- **`**/*.ts`, `**/*.tsx`, etc.**: `enhanced-parser` for type-aware linting with `.vue` import support
 
 ## Supported Vue SFC Patterns
 
@@ -82,7 +84,7 @@ The `recommended` config sets up:
 
 ### `typed-vue/strict-boolean-expressions`
 
-Requires boolean expressions in `v-if`, `v-else-if`, and `v-show` directives.
+Requires boolean expressions in `v-if`, `v-else-if`, and `v-show` directives. Vue `Ref`, `ComputedRef`, and `ShallowRef` types are automatically unwrapped (e.g., `Ref<boolean>` is treated as `boolean`).
 
 ```vue
 <template>
@@ -150,7 +152,7 @@ The ESLint Processor's `supportsAutofix` is set to `false`. Errors detected in t
 
 ### `@vue/language-core` version coupling
 
-The plugin depends on `@vue/language-core` v3.x (and `@volar/language-core` v2.x for type definitions). Changes to the virtual file format in these packages may require updates to this plugin.
+The plugin depends on `@vue/language-core` v3.x. Changes to the virtual file format in this package may require updates to this plugin.
 
 ### Template-only errors from Processor
 
