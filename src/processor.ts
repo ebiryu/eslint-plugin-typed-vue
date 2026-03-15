@@ -1,8 +1,32 @@
 import * as path from "node:path";
+import { createRequire } from "node:module";
 import ts from "typescript";
 import type { Linter } from "eslint";
 import { getProgramProvider } from "./services/program-provider.ts";
 import { generatedToSource, type SourceMapping } from "./services/vue-virtual-files.ts";
+
+/**
+ * Load eslint-plugin-vue's postprocess for comment-directive support.
+ * eslint-plugin-vue is a peer dependency expected in the user's project.
+ */
+let vuePluginPostprocess: ((messages: Linter.LintMessage[][], filename: string) => Linter.LintMessage[]) | undefined;
+let vuePluginLoaded = false;
+
+function getVuePluginPostprocess() {
+  if (vuePluginLoaded) return vuePluginPostprocess;
+  vuePluginLoaded = true;
+  try {
+    const esmRequire = createRequire(import.meta.url);
+    const vuePlugin = esmRequire("eslint-plugin-vue");
+    const proc = vuePlugin?.processors?.vue;
+    if (proc?.postprocess) {
+      vuePluginPostprocess = proc.postprocess;
+    }
+  } catch {
+    // eslint-plugin-vue not available
+  }
+  return vuePluginPostprocess;
+}
 
 interface ProcessorFileData {
   sourceText: string;
@@ -93,7 +117,12 @@ export const processor: Linter.Processor = {
   },
 
   postprocess(messages: Linter.LintMessage[][], filename: string) {
-    const vueMessages = messages[0] ?? [];
+    // Delegate block 0 messages to eslint-plugin-vue's postprocess for
+    // comment-directive support (<!-- eslint-disable --> etc.).
+    const vuePostprocess = getVuePluginPostprocess();
+    const vueMessages = vuePostprocess
+      ? vuePostprocess([messages[0] ?? []], filename)
+      : (messages[0] ?? []);
     const tsMessages = messages[1];
 
     if (!tsMessages || tsMessages.length === 0) {
