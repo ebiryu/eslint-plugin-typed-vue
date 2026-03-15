@@ -99,3 +99,43 @@ describe("E2E: ESLint with typed Vue rules", () => {
     expect(unsafeErrors).toHaveLength(0);
   });
 });
+
+describe("E2E: --fix does not corrupt .ts files", () => {
+  it("should correctly apply prefer-const fix without corrupting code", async () => {
+    const tsPlugin = require("@typescript-eslint/eslint-plugin");
+
+    const eslint = new ESLint({
+      overrideConfigFile: true,
+      fix: true,
+      overrideConfig: [
+        {
+          files: ["**/*.ts"],
+          languageOptions: {
+            parser: enhancedParser,
+            parserOptions: {
+              tsconfigRootDir: fixturesDir,
+            },
+          },
+          plugins: {
+            "@typescript-eslint": tsPlugin,
+          },
+          rules: {
+            "prefer-const": "error",
+          },
+        },
+      ],
+    });
+
+    const tsPath = path.join(fixturesDir, "prefer-const.ts");
+    const results = await eslint.lintFiles([tsPath]);
+
+    expect(results).toHaveLength(1);
+
+    // The fix output should contain "const" not "constststst..."
+    const output = results[0].output;
+    expect(output).toBeDefined();
+    expect(output).toContain("const message");
+    expect(output).toContain("const count");
+    expect(output).not.toMatch(/const{2,}|constst/);
+  });
+});
