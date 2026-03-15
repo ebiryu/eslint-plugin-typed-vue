@@ -31,7 +31,7 @@ function findNodeContaining(
 
   // Walk up only through expression-combining nodes.
   while (node.parent) {
-    const parent = node.parent;
+    const parent: tsLib.Node = node.parent;
     if (
       tsModule.isPropertyAccessExpression(parent) ||
       tsModule.isElementAccessExpression(parent) ||
