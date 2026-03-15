@@ -47,7 +47,10 @@ export const parseForESLint = (code: string, options: Record<string, unknown>): 
         delete enhancedOptions.project;
         delete enhancedOptions.projectService;
       } else {
-        // Block 0 (.vue): Original .vue code. Use per-call program with real path.
+        // Block 0 (.vue): Original .vue code parsed by vue-eslint-parser.
+        // vue-eslint-parser may call the inner parser multiple times for <script setup>
+        // (once for import classification, once with restructured code).
+        // Use getProgramForVueCode so each call gets a Program matching its code.
         if (!isTemplateExpression(code)) {
           const program = provider.getProgramForVueCode(
             tsconfigRootDir,

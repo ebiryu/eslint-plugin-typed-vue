@@ -3,30 +3,101 @@ import { sourceToGenerated, type VirtualFileInfo } from "./vue-virtual-files.ts"
 import type { ProgramProvider } from "./program-provider.ts";
 
 /**
- * Find the TS AST node that best spans the given range in a source file.
- * When endPosition is provided, walks up from the innermost node at startPosition
- * to find one that also covers endPosition (i.e., the full expression).
+ * Find the innermost TS AST node that contains the given position,
+ * then walk up through "transparent" expression nodes so that:
+ *
+ * - `__VLS_ctx.state.isLoading`: landing on `isLoading` walks up through
+ *   PropertyAccessExpression to get the full chain.
+ * - `__VLS_ctx.stats.length === 0`: landing on `0` walks up through
+ *   BinaryExpression to get the full comparison.
+ *
+ * Only walks through expression-combining nodes (property access, binary ops,
+ * unary ops, parentheses, etc.) — stops at call arguments, object properties,
+ * variable declarations, and other structural boundaries.
  */
-function findNodeAtRange(
+function findNodeContaining(
   tsModule: typeof tsLib,
   sourceFile: tsLib.SourceFile,
-  startPosition: number,
-  endPosition?: number,
+  position: number,
 ): tsLib.Node | undefined {
   function visit(node: tsLib.Node): tsLib.Node | undefined {
-    if (startPosition < node.getStart(sourceFile) || startPosition >= node.getEnd()) {
+    if (position < node.getStart(sourceFile) || position >= node.getEnd()) {
       return undefined;
     }
     return tsModule.forEachChild(node, visit) ?? node;
   }
   let node = visit(sourceFile);
-  if (!node || endPosition === undefined) return node;
+  if (!node) return undefined;
 
-  // Walk up to find a node that spans the full expression range
-  while (node && node.getEnd() < endPosition && node.parent) {
-    node = node.parent;
+  // Walk up only through expression-combining nodes.
+  while (node.parent) {
+    const parent = node.parent;
+    if (
+      tsModule.isPropertyAccessExpression(parent) ||
+      tsModule.isElementAccessExpression(parent) ||
+      tsModule.isBinaryExpression(parent) ||
+      tsModule.isPrefixUnaryExpression(parent) ||
+      tsModule.isPostfixUnaryExpression(parent) ||
+      tsModule.isParenthesizedExpression(parent) ||
+      tsModule.isNonNullExpression(parent) ||
+      tsModule.isAsExpression(parent) ||
+      tsModule.isTypeAssertionExpression(parent)
+    ) {
+      node = parent;
+      continue;
+    }
+    break;
   }
   return node;
+}
+
+/**
+ * Vue Ref types that are auto-unwrapped in templates.
+ * When the type checker reports `Ref<T>`, the template actually sees `T`.
+ */
+const VUE_REF_TYPE_NAMES = new Set([
+  "Ref",
+  "ShallowRef",
+  "ComputedRef",
+  "WritableComputedRef",
+  "ToRef",
+]);
+
+/**
+ * If the type is a Vue Ref-like type (Ref<T>, ComputedRef<T>, etc.),
+ * return the inner type T. Otherwise return the type unchanged.
+ */
+function unwrapVueRefType(
+  tsModule: typeof tsLib,
+  checker: tsLib.TypeChecker,
+  type: tsLib.Type,
+): tsLib.Type {
+  const symbol = type.getSymbol() ?? type.aliasSymbol;
+  if (!symbol) return type;
+
+  const name = symbol.getName();
+  if (!VUE_REF_TYPE_NAMES.has(name)) return type;
+
+  // Verify it comes from a Vue-related module
+  const declarations = symbol.getDeclarations();
+  if (!declarations?.length) return type;
+  const sourceFile = declarations[0].getSourceFile();
+  const fileName = sourceFile.fileName;
+  if (!fileName.includes("vue") && !fileName.includes("@vue")) return type;
+
+  // Extract the first type argument (the unwrapped value type)
+  const typeArgs = (type as any).typeArguments ?? (type as any).resolvedTypeArguments;
+  if (typeArgs && typeArgs.length > 0) {
+    return typeArgs[0];
+  }
+
+  // Fallback: look up the `.value` property type
+  const valueProp = type.getProperty("value");
+  if (valueProp) {
+    return checker.getTypeOfSymbolAtLocation(valueProp, valueProp.valueDeclaration!);
+  }
+
+  return type;
 }
 
 export interface TemplateExpressionType {
@@ -92,33 +163,38 @@ export class TemplateTypeResolver {
     sourceOffset: number,
     sourceEndOffset?: number,
   ): TemplateExpressionType | undefined {
-    const generatedOffset = sourceToGenerated(vFileInfo.mappings, sourceOffset);
-    if (generatedOffset === undefined) return undefined;
-
-    const generatedEndOffset =
-      sourceEndOffset !== undefined
-        ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
-        : undefined;
-
     const baseProgram = this.provider.getProgram(this.tsconfigRootDir);
     const sourceFile = baseProgram.getSourceFile(vueFilePath);
     if (!sourceFile) return undefined;
 
-    const node = findNodeAtRange(
-      this.tsModule,
-      sourceFile,
-      generatedOffset,
-      generatedEndOffset !== undefined ? generatedEndOffset + 1 : undefined,
-    );
+    // Map the end offset to a position in the generated code.
+    // The end offset is more reliable than the start because for property access
+    // expressions like `state.isLoading`, the start token `state` may map to a
+    // different occurrence in the generated code (e.g. a type declaration), while
+    // the end uniquely identifies the expression in the `if(...)` block.
+    // Fall back to start offset only when end is unavailable.
+    const generatedEnd = sourceEndOffset !== undefined
+      ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
+      : undefined;
+    const generatedOffset = generatedEnd ?? sourceToGenerated(vFileInfo.mappings, sourceOffset);
+    if (generatedOffset === undefined) return undefined;
+
+    const node = findNodeContaining(this.tsModule, sourceFile, generatedOffset);
     if (!node) return undefined;
 
     const checker = baseProgram.getTypeChecker();
-    const type = checker.getTypeAtLocation(node);
-
-    return {
-      typeString: checker.typeToString(type),
-      flags: type.flags,
-    };
+    try {
+      let type = checker.getTypeAtLocation(node);
+      type = unwrapVueRefType(this.tsModule, checker, type);
+      return {
+        typeString: checker.typeToString(type),
+        flags: type.flags,
+      };
+    } catch {
+      // The node may belong to a SourceFile that the checker cannot process
+      // (e.g. when vue-eslint-parser rebuilds the script AST). Gracefully skip.
+      return undefined;
+    }
   }
 }
 
@@ -131,4 +207,13 @@ export function setTemplateTypeResolver(key: string, resolver: TemplateTypeResol
 
 export function getTemplateTypeResolver(key: string): TemplateTypeResolver | undefined {
   return resolverStore.get(key);
+}
+
+/**
+ * Resolve a processor virtual path (e.g. `file.vue/0_0.vue`) to the real .vue path.
+ * Returns the original path if it's not a processor virtual path.
+ */
+export function resolveVuePath(filePath: string): string {
+  const match = filePath.match(/^(.+\.vue)\/\d+_?\d*\.(?:ts|vue)$/);
+  return match ? match[1] : filePath;
 }

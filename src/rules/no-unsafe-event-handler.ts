@@ -1,6 +1,6 @@
 import type { Rule } from "eslint";
 import ts from "typescript";
-import { getTemplateTypeResolver } from "../services/template-type-resolver.ts";
+import { getTemplateTypeResolver, resolveVuePath } from "../services/template-type-resolver.ts";
 import type { VueParserServices } from "./types.ts";
 
 /**
@@ -21,7 +21,7 @@ const rule: Rule.RuleModule = {
     schema: [],
   },
   create(context) {
-    const filePath = context.filename;
+    const filePath = resolveVuePath(context.filename);
     if (!filePath.endsWith(".vue")) return {};
 
     const resolver = getTemplateTypeResolver(filePath);

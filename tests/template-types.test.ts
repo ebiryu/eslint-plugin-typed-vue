@@ -65,4 +65,55 @@ describe("typed-vue/strict-boolean-expressions", () => {
     // v-if="count" is line 10, v-if="name" is line 11, v-show="count" is line 14
     expect(lines).toEqual([10, 11, 14]);
   });
+
+  it("should treat comparison and binary expressions as boolean", async () => {
+    const eslint = createESLint();
+    const results = await eslint.lintFiles([path.join(fixturesDir, "comparison-expr.vue")]);
+
+    const errors = results[0].messages.filter(
+      (m) => m.ruleId === "typed-vue/strict-boolean-expressions",
+    );
+
+    // Should report: v-else-if="count" (line 13), v-show="count" (line 17)
+    // Should NOT report: stats.length === 0, stats.length > 5, count !== 0, !flag, stats.length >= 1
+    expect(errors.length).toBe(2);
+
+    const lines = errors.map((e) => e.line).sort((a, b) => a - b);
+    expect(lines).toEqual([13, 17]);
+  });
+
+  it("should correctly type-check property access expressions like state.isLoading", async () => {
+    const eslint = createESLint();
+    const results = await eslint.lintFiles([path.join(fixturesDir, "prop-boolean.vue")]);
+
+    const errors = results[0].messages.filter(
+      (m) => m.ruleId === "typed-vue/strict-boolean-expressions",
+    );
+
+    // state.isLoading is boolean → should NOT be reported
+    // state.count is number → should be reported (line 12)
+    // state.name is string → should be reported (line 13)
+    expect(errors.length).toBe(2);
+    expect(errors.every((e) => e.line !== 11)).toBe(true); // line 11 is state.isLoading
+  });
+
+  it("should unwrap Vue Ref/ComputedRef types in template expressions", async () => {
+    const eslint = createESLint();
+    const results = await eslint.lintFiles([path.join(fixturesDir, "ref-unwrap.vue")]);
+
+    const errors = results[0].messages.filter(
+      (m) => m.ruleId === "typed-vue/strict-boolean-expressions",
+    );
+
+    // ref(true) → boolean, computed(() => bool) → boolean, shallowRef(false) → boolean → OK
+    // ref(0) → number → NOT OK (line 15)
+    // ref("hello") → string → NOT OK (line 16)
+    expect(errors.length).toBe(2);
+
+    const lines = errors.map((e) => e.line).sort((a, b) => a - b);
+    expect(lines).toEqual([15, 16]);
+
+    // Verify the reported types are unwrapped (number/string, not Ref<number>/Ref<string>)
+    expect(errors.every((e) => !e.message.includes("Ref"))).toBe(true);
+  });
 });

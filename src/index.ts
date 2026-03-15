@@ -35,7 +35,7 @@ const plugin: {
 Object.defineProperty(plugin, "configs", {
   get() {
     return {
-      recommended: createRecommendedConfig(),
+      recommended: createRecommendedConfig(plugin),
     };
   },
 });

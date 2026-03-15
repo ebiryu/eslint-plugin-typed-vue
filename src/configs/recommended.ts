@@ -1,10 +1,14 @@
-import type { Linter } from "eslint";
+import type { ESLint, Linter } from "eslint";
 import * as vueParser from "vue-eslint-parser";
 import * as enhancedParser from "../parser/enhanced-parser.ts";
 import { processor } from "../processor.ts";
 
-export function createRecommendedConfig(): Linter.Config[] {
+export function createRecommendedConfig(plugin: ESLint.Plugin): Linter.Config[] {
   return [
+    {
+      name: "typed-vue/plugin",
+      plugins: { "typed-vue": plugin },
+    },
     {
       name: "typed-vue/recommended-vue",
       files: ["**/*.vue"],
