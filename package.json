@@ -32,7 +32,6 @@
     "fmt:check": "oxfmt --check"
   },
   "dependencies": {
-    "@volar/language-core": "^2.4.28",
     "@vue/language-core": "^3.2.5"
   },
   "devDependencies": {
@@ -40,6 +39,7 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@typescript-eslint/rule-tester": "^8.0.0",
+    "@volar/language-core": "^2.4.28",
     "eslint": "^10.0.0",
     "eslint-plugin-vue": "^10.8.0",
     "oxfmt": "^0.37.0",
