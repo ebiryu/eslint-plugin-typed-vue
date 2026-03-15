@@ -84,6 +84,41 @@ function offsetToLineCol(text: string, offset: number): { line: number; column: 
   return { line, column: col };
 }
 
+/**
+ * Check if the given offset in .vue source text is inside an HTML tag name.
+ * Tag names appear right after '<' or '</', e.g. `<OfflineIndicator` or `</div`.
+ * Messages mapping to tag name positions come from @vue/language-core boilerplate
+ * (e.g. bare `ComponentName;` statements for auto-imported components) and should
+ * not be reported as lint errors.
+ */
+function isAtTagName(sourceText: string, offset: number): boolean {
+  // Scan backwards from offset to find the nearest '<' that isn't inside a string or expression
+  let i = offset - 1;
+  while (i >= 0) {
+    const ch = sourceText[i];
+    if (ch === "<") return true;
+    // If we hit '>' or a quote or a whitespace before '<', we're not in a tag name
+    if (ch === ">" || ch === '"' || ch === "'" || ch === "`" || ch === "{" || ch === "}") {
+      return false;
+    }
+    // '/' is ok (for </Component>), but other special chars mean we're not in a tag name
+    if (ch !== "/" && ch !== " " && ch !== "\t" && ch !== "\n" && ch !== "\r" && !isTagNameChar(ch)) {
+      return false;
+    }
+    // whitespace between '<' and the tag name is not valid HTML, so if we see
+    // whitespace we should check if there's a '<' before it
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      return false;
+    }
+    i--;
+  }
+  return false;
+}
+
+function isTagNameChar(ch: string): boolean {
+  return /[a-zA-Z0-9\-_.]/.test(ch);
+}
+
 export const processor: Linter.Processor = {
   preprocess(text: string, filename: string) {
     if (!filename.endsWith(".vue")) {
@@ -150,6 +185,12 @@ export const processor: Linter.Processor = {
         const [tStart, tEnd] = fileData.templateRange;
         if (srcOffset < tStart || srcOffset >= tEnd) continue;
       }
+
+      // Skip messages that map back to HTML tag names in the template.
+      // @vue/language-core generates bare identifier statements (e.g. `ComponentName;`)
+      // for auto-imported components, which map to the tag name position in the template.
+      // These are not user-written expressions and should not be linted.
+      if (isAtTagName(fileData.sourceText, srcOffset)) continue;
 
       // Convert source offset to line/column
       const { line, column } = offsetToLineCol(fileData.sourceText, srcOffset);
