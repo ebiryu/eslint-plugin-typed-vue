@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "ESLint plugin that enables typescript-eslint type-aware rules for Vue SFC files",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ebiryu/eslint-plugin-typed-vue"
+  },
   "files": [
     "dist"
   ],
