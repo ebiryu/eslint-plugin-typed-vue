@@ -1,11 +1,23 @@
-import type { ESLint } from "eslint";
+import type { Linter, Rule } from "eslint";
 import ts from "typescript";
 import { createRecommendedConfig } from "./configs/recommended.ts";
 import { rules } from "./rules/index.ts";
 import { processor } from "./processor.ts";
 import { getProgramProvider } from "./services/program-provider.ts";
 
-const plugin: ESLint.Plugin = {
+const plugin: {
+  meta: {
+    name: string;
+    version: string;
+  };
+  rules: Record<string, Rule.RuleModule>;
+  processors: {
+    vue: Linter.Processor;
+  };
+  configs: {
+    recommended: ReturnType<typeof createRecommendedConfig>;
+  };
+} = {
   meta: {
     name: "eslint-plugin-typed-vue",
     version: "0.1.0",
@@ -14,7 +26,9 @@ const plugin: ESLint.Plugin = {
   processors: {
     vue: processor,
   },
-  configs: {},
+  configs: {} as {
+    recommended: ReturnType<typeof createRecommendedConfig>;
+  },
 };
 
 // Lazily define configs to avoid circular references
