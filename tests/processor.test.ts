@@ -3,7 +3,11 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import ts from "typescript";
 import { ESLint } from "eslint";
-import { VueVirtualFiles } from "../src/services/vue-virtual-files.js";
+import {
+  VueVirtualFiles,
+  generatedRangeToSourceRange,
+  type SourceMapping,
+} from "../src/services/vue-virtual-files.js";
 import { processor } from "../src/processor.js";
 import * as enhancedParser from "../src/parser/enhanced-parser.js";
 
@@ -181,6 +185,60 @@ describe("processor: E2E with ESLint", () => {
     },
   );
 
+  it("should have supportsAutofix enabled", () => {
+    expect(processor.supportsAutofix).toBe(true);
+  });
+
+  it(
+    "should pass through vue plugin fixes (block 0) when autofix is enabled",
+    { timeout: 15000 },
+    async () => {
+      const vueParser = require("vue-eslint-parser");
+      const vuePlugin = require("eslint-plugin-vue");
+
+      // First lint WITHOUT fix to get fixable messages
+      const eslint = new ESLint({
+        overrideConfigFile: true,
+        overrideConfig: [
+          {
+            files: ["**/*.vue"],
+            processor,
+            languageOptions: {
+              parser: vueParser,
+              parserOptions: {
+                parser: enhancedParser,
+                tsconfigRootDir: fixturesDir,
+                extraFileExtensions: [".vue"],
+              },
+            },
+            plugins: { vue: vuePlugin },
+            rules: {
+              "vue/html-self-closing": [
+                "error",
+                {
+                  html: { void: "always", normal: "never", component: "always" },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      // fixable-vue-rule.vue has `<br>` which violates vue/html-self-closing
+      const filePath = path.join(fixturesDir, "fixable-vue-rule.vue");
+      const results = await eslint.lintFiles([filePath]);
+
+      expect(results).toHaveLength(1);
+      const messages = results[0].messages;
+      const vueErrors = messages.filter((m) => m.ruleId === "vue/html-self-closing");
+      expect(vueErrors.length).toBeGreaterThan(0);
+
+      // Fix property should be preserved (not stripped), proving supportsAutofix works
+      const withFix = vueErrors.filter((m) => m.fix);
+      expect(withFix.length).toBeGreaterThan(0);
+    },
+  );
+
   it("should NOT report errors on safe template expressions", { timeout: 15000 }, async () => {
     const eslint = createESLint({
       "@typescript-eslint/no-unsafe-member-access": "error",
@@ -193,5 +251,76 @@ describe("processor: E2E with ESLint", () => {
       (m) => m.ruleId === "@typescript-eslint/no-unsafe-member-access",
     );
     expect(errors).toHaveLength(0);
+  });
+});
+
+describe("generatedRangeToSourceRange", () => {
+  it("should remap a range within a single 1:1 mapping entry", () => {
+    const mappings: SourceMapping[] = [
+      {
+        sourceOffsets: [100],
+        generatedOffsets: [500],
+        lengths: [20],
+        // no generatedLengths → same as lengths (1:1)
+      },
+    ];
+
+    // Range [505, 510) in generated → [105, 110) in source
+    const result = generatedRangeToSourceRange(mappings, 505, 510);
+    expect(result).toEqual([105, 110]);
+  });
+
+  it("should return undefined when range spans outside mapped region", () => {
+    const mappings: SourceMapping[] = [
+      {
+        sourceOffsets: [100],
+        generatedOffsets: [500],
+        lengths: [20],
+      },
+    ];
+
+    // Range starts before the mapping
+    expect(generatedRangeToSourceRange(mappings, 495, 510)).toBeUndefined();
+
+    // Range ends after the mapping
+    expect(generatedRangeToSourceRange(mappings, 510, 525)).toBeUndefined();
+  });
+
+  it("should return undefined when range spans two different mapping entries", () => {
+    const mappings: SourceMapping[] = [
+      {
+        sourceOffsets: [100, 200],
+        generatedOffsets: [500, 600],
+        lengths: [20, 20],
+      },
+    ];
+
+    // Start in first entry, end in second entry
+    expect(generatedRangeToSourceRange(mappings, 510, 605)).toBeUndefined();
+  });
+
+  it("should return undefined when generatedLength differs from sourceLength", () => {
+    const mappings: SourceMapping[] = [
+      {
+        sourceOffsets: [100],
+        generatedOffsets: [500],
+        lengths: [10],
+        generatedLengths: [20], // different length → not 1:1
+      },
+    ];
+
+    expect(generatedRangeToSourceRange(mappings, 505, 510)).toBeUndefined();
+  });
+
+  it("should return undefined for empty range", () => {
+    const mappings: SourceMapping[] = [
+      {
+        sourceOffsets: [100],
+        generatedOffsets: [500],
+        lengths: [20],
+      },
+    ];
+
+    expect(generatedRangeToSourceRange(mappings, 505, 505)).toBeUndefined();
   });
 });

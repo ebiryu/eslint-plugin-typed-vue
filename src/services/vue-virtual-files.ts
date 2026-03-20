@@ -139,6 +139,60 @@ export function sourceToGenerated(
   return binarySearchMapping(entries, sourceOffset);
 }
 
+/**
+ * Maps a generated [start, end) range back to a source [start, end) range.
+ * Returns undefined if the range cannot be safely remapped — i.e., if either
+ * endpoint falls outside a mapped region, or the endpoints belong to different
+ * mapping entries, or the mapping is not 1:1 (generatedLength != sourceLength).
+ */
+export function generatedRangeToSourceRange(
+  mappings: SourceMapping[],
+  genStart: number,
+  genEnd: number,
+): [number, number] | undefined {
+  if (genStart >= genEnd) return undefined;
+
+  const entries = getFlatMappings(mappings, "generatedToSource");
+
+  // Find the entry containing genStart
+  const startEntry = findContainingEntry(entries, genStart);
+  if (!startEntry) return undefined;
+
+  // genEnd is exclusive, so check genEnd - 1
+  const endEntry = findContainingEntry(entries, genEnd - 1);
+  if (!endEntry) return undefined;
+
+  // Both endpoints must be in the same mapping entry
+  if (startEntry !== endEntry) return undefined;
+
+  // Must be 1:1 mapping (same length in source and generated)
+  if (startEntry.fromLength !== startEntry.toLength) return undefined;
+
+  const srcStart = startEntry.toOffset + (genStart - startEntry.fromOffset);
+  const srcEnd = startEntry.toOffset + (genEnd - startEntry.fromOffset);
+  return [srcStart, srcEnd];
+}
+
+function findContainingEntry(
+  entries: FlatMappingEntry[],
+  offset: number,
+): FlatMappingEntry | undefined {
+  let lo = 0;
+  let hi = entries.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const e = entries[mid];
+    if (offset < e.fromOffset) {
+      hi = mid - 1;
+    } else if (offset >= e.fromOffset + e.fromLength) {
+      lo = mid + 1;
+    } else {
+      return e;
+    }
+  }
+  return undefined;
+}
+
 export class VueVirtualFiles {
   private cache = new Map<string, VirtualFileInfo>();
   private languagePlugin: VueLanguagePluginWithTs;

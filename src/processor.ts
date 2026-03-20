@@ -3,7 +3,11 @@ import { createRequire } from "node:module";
 import ts from "typescript";
 import type { Linter } from "eslint";
 import { getProgramProvider } from "./services/program-provider.ts";
-import { generatedToSource, type SourceMapping } from "./services/vue-virtual-files.ts";
+import {
+  generatedToSource,
+  generatedRangeToSourceRange,
+  type SourceMapping,
+} from "./services/vue-virtual-files.ts";
 
 /**
  * Load eslint-plugin-vue's postprocess for comment-directive support.
@@ -149,6 +153,46 @@ function isEventBoilerplateLine(generatedText: string, line: number): boolean {
   return lineText.includes("{} as any");
 }
 
+/**
+ * Attempt to remap a fix from generated-code offsets to .vue source offsets.
+ * Returns the remapped fix if the range falls entirely within a single 1:1
+ * mapped region, or undefined if it cannot be safely remapped.
+ */
+function remapFix(
+  fix: { range: [number, number]; text: string },
+  mappings: SourceMapping[],
+): { range: [number, number]; text: string } | undefined {
+  // Reject fixes whose replacement text references generated-only constructs
+  if (fix.text.includes("__VLS_")) return undefined;
+
+  const srcRange = generatedRangeToSourceRange(mappings, fix.range[0], fix.range[1]);
+  if (!srcRange) return undefined;
+
+  return { range: srcRange, text: fix.text };
+}
+
+/**
+ * Remap suggestions array, dropping any that cannot be safely remapped.
+ */
+function remapSuggestions(
+  suggestions: Linter.LintSuggestion[] | undefined,
+  mappings: SourceMapping[],
+): Linter.LintSuggestion[] | undefined {
+  if (!suggestions || suggestions.length === 0) return undefined;
+  const remapped: Linter.LintSuggestion[] = [];
+  for (const s of suggestions) {
+    if (!s.fix) {
+      remapped.push(s);
+      continue;
+    }
+    const newFix = remapFix(s.fix, mappings);
+    if (newFix) {
+      remapped.push({ ...s, fix: newFix });
+    }
+  }
+  return remapped.length > 0 ? remapped : undefined;
+}
+
 export const processor: Linter.Processor = {
   preprocess(text: string, filename: string) {
     if (!filename.endsWith(".vue")) {
@@ -247,17 +291,31 @@ export const processor: Linter.Processor = {
         }
       }
 
-      remappedMessages.push({
+      // Remap fix and suggestions from generated offsets to source offsets.
+      // Fixes that span boilerplate or non-1:1 mapped regions are dropped.
+      const remappedMsg: Linter.LintMessage = {
         ...msg,
         line,
         column: column + 1, // ESLint uses 1-based columns
         endLine,
         endColumn,
-      });
+      };
+      if (msg.fix) {
+        const newFix = remapFix(msg.fix, fileData.mappings);
+        if (newFix) {
+          remappedMsg.fix = newFix;
+        } else {
+          delete remappedMsg.fix;
+        }
+      }
+      if (msg.suggestions) {
+        remappedMsg.suggestions = remapSuggestions(msg.suggestions, fileData.mappings);
+      }
+      remappedMessages.push(remappedMsg);
     }
 
     return [...vueMessages, ...remappedMessages];
   },
 
-  supportsAutofix: false,
+  supportsAutofix: true,
 };
