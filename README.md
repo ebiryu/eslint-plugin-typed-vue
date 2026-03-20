@@ -146,9 +146,9 @@ resetCache();
 
 The plugin uses `ts.createProgram` with incremental compilation (`oldProgram`). Each `.vue` file requires a per-file Program rebuild because the source code provided by `vue-eslint-parser` may differ from the on-disk content. This results in approximately O(N) scaling per file as the number of files grows. For very large projects (100+ Vue files), lint times may become noticeable.
 
-### No autofix support in Processor
+### Limited autofix support in Processor
 
-The ESLint Processor's `supportsAutofix` is set to `false`. Errors detected in template expressions via the Processor cannot be auto-fixed because the source mapping between generated TypeScript code and the original `.vue` template is not bidirectional for fix ranges.
+The Processor supports autofix. Fixes from eslint-plugin-vue rules are supported. Fixes from typescript-eslint rules on generated template code are applied only when the fix range falls entirely within a 1:1 source-mapped region. Fixes that span generated boilerplate (`__VLS_ctx.` prefixes, etc.) are dropped — the error is still reported but without an autofix.
 
 ### `@vue/language-core` version coupling
 
