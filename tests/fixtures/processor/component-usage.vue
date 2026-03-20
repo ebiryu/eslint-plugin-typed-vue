@@ -16,7 +16,7 @@ function handleClick(): void {}
   <div :class="msg">bound</div>
   <div @click="handleClick">clickable</div>
   <div>{{ count + 1 }}</div>
-  <div>{{ msg ? 'yes' : 'no' }}</div>
+  <div>{{ msg ? "yes" : "no" }}</div>
   <slot />
   <template v-slot:default>
     <div>slotted</div>

@@ -65,8 +65,8 @@ export default tseslint.config(
 The `recommended` config sets up:
 
 - **Plugin registration**: Registers `typed-vue` plugin globally so custom rules are available
-- **`**/*.vue`**: `vue-eslint-parser` with `enhanced-parser` as the inner parser, plus the Processor for template type checking
-- **`**/*.ts`, `**/*.tsx`, etc.**: `enhanced-parser` for type-aware linting with `.vue` import support
+- **`**/\*.vue`**: `vue-eslint-parser`with`enhanced-parser` as the inner parser, plus the Processor for template type checking
+- **`**/_.ts`, `\*\*/_.tsx`, etc.**: `enhanced-parser`for type-aware linting with`.vue` import support
 
 ## Supported Vue SFC Patterns
 

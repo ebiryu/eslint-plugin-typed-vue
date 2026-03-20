@@ -136,7 +136,12 @@ export class TemplateTypeResolver {
   ): TemplateExpressionType | undefined {
     const cachedVFileInfo = this.vFileInfoCache.get(vueFilePath);
     if (cachedVFileInfo) {
-      return this.getTypeFromVirtualFile(cachedVFileInfo, vueFilePath, sourceOffset, sourceEndOffset);
+      return this.getTypeFromVirtualFile(
+        cachedVFileInfo,
+        vueFilePath,
+        sourceOffset,
+        sourceEndOffset,
+      );
     }
 
     const vueVirtualFiles = this.provider.getVueVirtualFiles();
@@ -175,9 +180,10 @@ export class TemplateTypeResolver {
     // different occurrence in the generated code (e.g. a type declaration), while
     // the end uniquely identifies the expression in the `if(...)` block.
     // Fall back to start offset only when end is unavailable.
-    const generatedEnd = sourceEndOffset !== undefined
-      ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
-      : undefined;
+    const generatedEnd =
+      sourceEndOffset !== undefined
+        ? sourceToGenerated(vFileInfo.mappings, sourceEndOffset - 1)
+        : undefined;
     const generatedOffset = generatedEnd ?? sourceToGenerated(vFileInfo.mappings, sourceOffset);
     if (generatedOffset === undefined) return undefined;
 
@@ -186,7 +192,7 @@ export class TemplateTypeResolver {
     // If the end-offset resolved to `any` but we also have a start-offset mapping,
     // retry with the start offset. The end offset can land in @vue/language-core's
     // trailing reference list (e.g. `[var1, var2, ...]`) where identifiers are untyped.
-    if (result && (result.flags & 1) && generatedEnd !== undefined) {
+    if (result && result.flags & 1 && generatedEnd !== undefined) {
       const generatedStart = sourceToGenerated(vFileInfo.mappings, sourceOffset);
       if (generatedStart !== undefined && generatedStart !== generatedOffset) {
         const retryResult = this.resolveTypeAtOffset(sourceFile, generatedStart);

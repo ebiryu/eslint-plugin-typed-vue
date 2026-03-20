@@ -9,7 +9,9 @@ import { generatedToSource, type SourceMapping } from "./services/vue-virtual-fi
  * Load eslint-plugin-vue's postprocess for comment-directive support.
  * eslint-plugin-vue is a peer dependency expected in the user's project.
  */
-let vuePluginPostprocess: ((messages: Linter.LintMessage[][], filename: string) => Linter.LintMessage[]) | undefined;
+let vuePluginPostprocess:
+  | ((messages: Linter.LintMessage[][], filename: string) => Linter.LintMessage[])
+  | undefined;
 let vuePluginLoaded = false;
 
 function getVuePluginPostprocess() {
@@ -102,7 +104,14 @@ function isAtTagName(sourceText: string, offset: number): boolean {
       return false;
     }
     // '/' is ok (for </Component>), but other special chars mean we're not in a tag name
-    if (ch !== "/" && ch !== " " && ch !== "\t" && ch !== "\n" && ch !== "\r" && !isTagNameChar(ch)) {
+    if (
+      ch !== "/" &&
+      ch !== " " &&
+      ch !== "\t" &&
+      ch !== "\n" &&
+      ch !== "\r" &&
+      !isTagNameChar(ch)
+    ) {
       return false;
     }
     // whitespace between '<' and the tag name is not valid HTML, so if we see
