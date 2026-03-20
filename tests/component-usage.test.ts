@@ -22,8 +22,6 @@ describe("no-unused-expressions in template", () => {
     const content = fs.readFileSync(filePath, "utf-8");
     const vFileInfo = vueFiles.getVirtualFile(filePath, content);
     expect(vFileInfo).toBeDefined();
-    console.log("=== Generated code (auto-import) ===");
-    console.log(vFileInfo!.code);
   });
 
   it(
@@ -74,10 +72,6 @@ describe("no-unused-expressions in template", () => {
       expect(results).toHaveLength(1);
 
       const allErrors = results[0].messages;
-      console.log("=== All messages ===");
-      for (const e of allErrors) {
-        console.log(`  line ${e.line}:${e.column} [${e.ruleId}] ${e.message}`);
-      }
 
       // no-unused-expressions from auto-imported component tags should be suppressed
       const unusedExprErrors = allErrors.filter(
