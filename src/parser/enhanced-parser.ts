@@ -108,16 +108,18 @@ export const parseForESLint = (code: string, options: Record<string, unknown>): 
       const provider = getProgramProvider(ts);
       const program = provider.getProgram(tsconfigRootDir);
 
-      // Only provide the program if its source file text matches the code
-      // being parsed. During ESLint --fix, the code changes between passes
-      // but the cached program retains the original source file. Using a
-      // stale source file causes AST position mismatches that corrupt fixes.
+      // During ESLint --fix, the code changes between passes but the cached
+      // program retains the original source file. If the source file text
+      // doesn't match, create a one-off program with the updated code so that
+      // AST positions are correct and type information is always available.
       const sourceFile = filePath ? program.getSourceFile(filePath) : undefined;
-      if (!sourceFile || sourceFile.text === code) {
+      if (sourceFile && sourceFile.text !== code) {
+        enhancedOptions.programs = [provider.getProgramForTsCode(tsconfigRootDir, filePath!, code)];
+      } else {
         enhancedOptions.programs = [program];
-        delete enhancedOptions.project;
-        delete enhancedOptions.projectService;
       }
+      delete enhancedOptions.project;
+      delete enhancedOptions.projectService;
     } catch (e) {
       console.warn("[eslint-plugin-typed-vue] Failed to create typed program:", e);
     }

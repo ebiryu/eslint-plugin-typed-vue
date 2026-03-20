@@ -32,6 +32,40 @@ export class ProgramProvider {
     return this.sys.readFile(filePath, "utf-8");
   }
 
+  /**
+   * Get a program where the specified .ts file's source text is overridden
+   * with the given code. Used during ESLint --fix where the code changes
+   * between passes but is not written to disk, so the cached program's
+   * source file would be stale.
+   */
+  getProgramForTsCode(tsconfigRootDir: string, filePath: string, code: string): tsLib.Program {
+    const baseProgram = this.getProgram(tsconfigRootDir);
+    const options = baseProgram.getCompilerOptions();
+    const vueVirtualFiles = this.getOrCreateVueVirtualFiles(tsconfigRootDir);
+    const baseHost = this.createCompilerHost(options, vueVirtualFiles);
+
+    const host: tsLib.CompilerHost = {
+      ...baseHost,
+      getSourceFile: (fileName, languageVersionOrOptions, onError) => {
+        if (fileName === filePath) {
+          const languageVersion =
+            typeof languageVersionOrOptions === "number"
+              ? languageVersionOrOptions
+              : languageVersionOrOptions.languageVersion;
+          return this.tsModule.createSourceFile(fileName, code, languageVersion, true);
+        }
+        return baseHost.getSourceFile!(fileName, languageVersionOrOptions, onError);
+      },
+    };
+
+    return this.tsModule.createProgram({
+      rootNames: baseProgram.getRootFileNames(),
+      options,
+      host,
+      oldProgram: baseProgram,
+    });
+  }
+
   getProgram(tsconfigRootDir: string): tsLib.Program {
     const cached = this.programs.get(tsconfigRootDir);
     if (cached) return cached;

@@ -138,4 +138,44 @@ describe("E2E: --fix does not corrupt .ts files", () => {
     expect(output).toContain("const count");
     expect(output).not.toMatch(/const{2,}|constst/);
   });
+
+  it("should provide type information to typed rules during fix loop", async () => {
+    const tsPlugin = require("@typescript-eslint/eslint-plugin");
+
+    // prefer-const triggers a fix on the first pass; on the second pass the
+    // code has changed but typed rules (no-unsafe-assignment) must still work
+    // without "You have used a rule which requires type information" error.
+    const eslint = new ESLint({
+      overrideConfigFile: true,
+      fix: true,
+      overrideConfig: [
+        {
+          files: ["**/*.ts"],
+          languageOptions: {
+            parser: enhancedParser,
+            parserOptions: {
+              tsconfigRootDir: fixturesDir,
+            },
+          },
+          plugins: {
+            "@typescript-eslint": tsPlugin,
+          },
+          rules: {
+            "prefer-const": "error",
+            "@typescript-eslint/no-unsafe-assignment": "error",
+          },
+        },
+      ],
+    });
+
+    const tsPath = path.join(fixturesDir, "prefer-const.ts");
+    const results = await eslint.lintFiles([tsPath]);
+
+    expect(results).toHaveLength(1);
+    // Should not have fatal errors (which would indicate type info failure)
+    const fatalErrors = results[0].messages.filter((m) => m.fatal);
+    expect(fatalErrors).toHaveLength(0);
+    // Fix should still be applied correctly
+    expect(results[0].output).toContain("const message");
+  });
 });
