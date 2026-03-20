@@ -1,5 +1,7 @@
 # eslint-plugin-typed-vue
 
+[![npm version](https://img.shields.io/npm/v/eslint-plugin-typed-vue)](https://www.npmjs.com/package/eslint-plugin-typed-vue)
+
 ESLint plugin that enables typescript-eslint's type-aware rules for Vue SFC files.
 
 ## Problem
