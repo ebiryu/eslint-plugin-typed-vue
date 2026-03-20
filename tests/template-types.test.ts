@@ -116,4 +116,27 @@ describe("typed-vue/strict-boolean-expressions", () => {
     // Verify the reported types are unwrapped (number/string, not Ref<number>/Ref<string>)
     expect(errors.every((e) => !e.message.includes("Ref"))).toBe(true);
   });
+
+  it("should resolve correct types for logical AND/OR expressions", async () => {
+    const eslint = createESLint();
+    const results = await eslint.lintFiles([path.join(fixturesDir, "logical-expr.vue")]);
+
+    const errors = results[0].messages.filter(
+      (m) => m.ruleId === "typed-vue/strict-boolean-expressions",
+    );
+
+    // Line 16: `item.meta && showActions` → boolean | undefined → NOT OK
+    // Line 17: `isReady && count > 0` → boolean → OK
+    // Line 18: `isReady || count > 0` → boolean → OK
+    // Line 19: `item.meta && count > 0` → false | boolean → NOT OK
+    expect(errors.length).toBe(2);
+
+    const lines = errors.map((e) => e.line).sort((a, b) => a - b);
+    expect(lines).toEqual([16, 19]);
+
+    // Verify the reported types are NOT 'any' — they should be the actual resolved type
+    for (const e of errors) {
+      expect(e.message).not.toContain("'any'");
+    }
+  });
 });

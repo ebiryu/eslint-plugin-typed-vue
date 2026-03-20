@@ -158,6 +158,29 @@ describe("processor: E2E with ESLint", () => {
     },
   );
 
+  it(
+    "should suppress no-unsafe-assignment from event handler boilerplate",
+    { timeout: 15000 },
+    async () => {
+      const eslint = createESLint({
+        "@typescript-eslint/no-unsafe-assignment": "error",
+      });
+
+      const results = await eslint.lintFiles([path.join(fixturesDir, "event-handler.vue")]);
+
+      expect(results).toHaveLength(1);
+      const errors = results[0].messages.filter(
+        (m) => m.ruleId === "@typescript-eslint/no-unsafe-assignment",
+      );
+
+      // event-handler.vue has @click and @change event handlers.
+      // @vue/language-core generates `{ eventName: {} as any }` boilerplate
+      // which should be suppressed by isEventBoilerplateLine.
+      // All types in this fixture are safe, so there should be zero errors.
+      expect(errors).toHaveLength(0);
+    },
+  );
+
   it("should NOT report errors on safe template expressions", { timeout: 15000 }, async () => {
     const eslint = createESLint({
       "@typescript-eslint/no-unsafe-member-access": "error",

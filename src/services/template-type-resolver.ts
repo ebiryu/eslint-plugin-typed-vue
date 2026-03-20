@@ -41,7 +41,9 @@ function findNodeContaining(
       tsModule.isParenthesizedExpression(parent) ||
       tsModule.isNonNullExpression(parent) ||
       tsModule.isAsExpression(parent) ||
-      tsModule.isTypeAssertionExpression(parent)
+      tsModule.isTypeAssertionExpression(parent) ||
+      tsModule.isTemplateSpan(parent) ||
+      tsModule.isTemplateExpression(parent)
     ) {
       node = parent;
       continue;
@@ -179,9 +181,32 @@ export class TemplateTypeResolver {
     const generatedOffset = generatedEnd ?? sourceToGenerated(vFileInfo.mappings, sourceOffset);
     if (generatedOffset === undefined) return undefined;
 
-    const node = findNodeContaining(this.tsModule, sourceFile, generatedOffset);
+    const result = this.resolveTypeAtOffset(sourceFile, generatedOffset);
+
+    // If the end-offset resolved to `any` but we also have a start-offset mapping,
+    // retry with the start offset. The end offset can land in @vue/language-core's
+    // trailing reference list (e.g. `[var1, var2, ...]`) where identifiers are untyped.
+    if (result && (result.flags & 1) && generatedEnd !== undefined) {
+      const generatedStart = sourceToGenerated(vFileInfo.mappings, sourceOffset);
+      if (generatedStart !== undefined && generatedStart !== generatedOffset) {
+        const retryResult = this.resolveTypeAtOffset(sourceFile, generatedStart);
+        if (retryResult && !(retryResult.flags & 1)) {
+          return retryResult;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private resolveTypeAtOffset(
+    sourceFile: tsLib.SourceFile,
+    offset: number,
+  ): TemplateExpressionType | undefined {
+    const node = findNodeContaining(this.tsModule, sourceFile, offset);
     if (!node) return undefined;
 
+    const baseProgram = this.provider.getProgram(this.tsconfigRootDir);
     const checker = baseProgram.getTypeChecker();
     try {
       let type = checker.getTypeAtLocation(node);
@@ -191,8 +216,6 @@ export class TemplateTypeResolver {
         flags: type.flags,
       };
     } catch {
-      // The node may belong to a SourceFile that the checker cannot process
-      // (e.g. when vue-eslint-parser rebuilds the script AST). Gracefully skip.
       return undefined;
     }
   }

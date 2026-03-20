@@ -63,6 +63,23 @@ describe("typed-vue/no-unsafe-template-expression", () => {
     );
     expect(errors.length).toBe(0);
   });
+
+  it("should not report template literals with safe typed expressions", async () => {
+    const eslint = createESLint({
+      "typed-vue/no-unsafe-template-expression": "error",
+    });
+    const results = await eslint.lintFiles([path.join(fixturesDir, "template-literal.vue")]);
+
+    expect(results).toHaveLength(1);
+    const errors = results[0].messages.filter(
+      (m) => m.ruleId === "typed-vue/no-unsafe-template-expression",
+    );
+
+    // Only `:href="unsafeVal"` on line 18 should be reported (any type)
+    // Template literals on lines 13-17 should NOT be reported (type is string)
+    expect(errors.length).toBe(1);
+    expect(errors[0].line).toBe(17);
+  });
 });
 
 describe("typed-vue/no-unsafe-event-handler", () => {

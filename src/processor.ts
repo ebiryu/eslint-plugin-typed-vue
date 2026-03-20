@@ -119,6 +119,27 @@ function isTagNameChar(ch: string): boolean {
   return /[a-zA-Z0-9\-_.]/.test(ch);
 }
 
+/**
+ * Check if the given line in generated code is @vue/language-core boilerplate
+ * for event handler normalization. These lines contain `{} as any` and are not
+ * user-written code, so lint errors from them should be suppressed.
+ *
+ * Pattern: `{ eventName: {} as any } as typeof __VLS_...`
+ */
+function isEventBoilerplateLine(generatedText: string, line: number): boolean {
+  let currentLine = 1;
+  let i = 0;
+  while (i < generatedText.length && currentLine < line) {
+    if (generatedText[i] === "\n") currentLine++;
+    i++;
+  }
+  // Extract the line content
+  let end = generatedText.indexOf("\n", i);
+  if (end === -1) end = generatedText.length;
+  const lineText = generatedText.slice(i, end);
+  return lineText.includes("{} as any");
+}
+
 export const processor: Linter.Processor = {
   preprocess(text: string, filename: string) {
     if (!filename.endsWith(".vue")) {
@@ -191,6 +212,11 @@ export const processor: Linter.Processor = {
       // for auto-imported components, which map to the tag name position in the template.
       // These are not user-written expressions and should not be linted.
       if (isAtTagName(fileData.sourceText, srcOffset)) continue;
+
+      // Skip messages originating from @vue/language-core event handler boilerplate.
+      // The generated code contains `{ eventName: {} as any } as typeof __VLS_...`
+      // which triggers no-unsafe-assignment but is not user code.
+      if (isEventBoilerplateLine(fileData.generatedText, msg.line)) continue;
 
       // Convert source offset to line/column
       const { line, column } = offsetToLineCol(fileData.sourceText, srcOffset);
